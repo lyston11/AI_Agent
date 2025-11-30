@@ -8,6 +8,5 @@ chromadb
 python-dotenv
 pypdf
 python-docx
-# 下面这两行是关键修正：强制使用无界面版 OpenCV
-opencv-python-headless
 rapidocr-onnxruntime
+opencv-python-headless
