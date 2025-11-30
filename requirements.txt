@@ -7,3 +7,6 @@ langgraph
 chromadb
 python-dotenv
 pysqlite3-binary
+pypdf
+python-docx
+rapidocr-onnxruntime
