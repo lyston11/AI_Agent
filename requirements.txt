@@ -6,7 +6,8 @@ langchain-core
 langgraph
 chromadb
 python-dotenv
-pysqlite3-binary
 pypdf
 python-docx
+# 下面这两行是关键修正：强制使用无界面版 OpenCV
+opencv-python-headless
 rapidocr-onnxruntime
