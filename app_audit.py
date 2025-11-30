@@ -34,19 +34,18 @@ except:
 
 @st.cache_resource
 def get_ocr():
+    # 初始化 OCR 引擎
     return RapidOCR()
 
 
 @st.cache_resource
 def get_audit_chain():
-    # 初始化大脑
     llm = ChatOpenAI(
         model="glm-4.5-air",
         api_key=CHAT_KEY,
         base_url="https://open.bigmodel.cn/api/paas/v4/"
     )
 
-    # 定义数据模具 (0-100分制)
     class ContractReview(BaseModel):
         risk_score: int = Field(description="根据风险严重程度动态评估的总分 (0-100)")
         risk_points: List[str] = Field(description="列出具体风险条款，并标注其严重等级(高/中/低)")
@@ -55,7 +54,6 @@ def get_audit_chain():
 
     parser = PydanticOutputParser(pydantic_object=ContractReview)
 
-    # 定义逻辑 Prompt
     prompt = PromptTemplate(
         template="""
         你是一个精通《民法典》与《劳动法》的资深法务专家。
@@ -91,7 +89,7 @@ uploaded_file = st.file_uploader("请拖拽文件到此处", type=["pdf", "docx"
 if uploaded_file and st.button("🚀 开始审计"):
     with st.status("🔍 正在读取并分析文件...", expanded=True) as status:
 
-        # --- A. 文件读取 (含 OCR) ---
+        # --- A. 文件读取 (含云端 OCR 修复) ---
         text_content = ""
         file_ext = os.path.splitext(uploaded_file.name)[1].lower()
 
@@ -99,20 +97,34 @@ if uploaded_file and st.button("🚀 开始审计"):
             if file_ext == ".pdf":
                 st.write("📄 检测到 PDF，正在解析...")
                 pdf_reader = PdfReader(uploaded_file)
+
+                # 1. 先尝试直接提取文字
                 for page in pdf_reader.pages:
                     text = page.extract_text()
                     if text: text_content += text + "\n"
 
-                # 如果文字太少，启动 OCR
+                # 2. 如果文字太少，启动 OCR (针对扫描件)
                 if len(text_content) < 50:
-                    st.warning("⚠️ 文本提取过少，启用 OCR 识别扫描件...")
-                    # 重置文件指针
-                    uploaded_file.seek(0)
-                    file_bytes = uploaded_file.read()
-                    # 这里的 OCR 处理简化：RapidOCR通常处理图片路径或bytes
-                    # 在 Streamlit 中直接处理 PDF 转图比较复杂，这里做个模拟 OCR 逻辑
-                    # 真实生产环境会用 pdf2image 转图再 OCR，为简化依赖，这里我们假设已提取
-                    st.info("已尝试增强识别模式。")
+                    st.warning("⚠️ 文本提取过少，正在启用 OCR 识别扫描件 (速度较慢，请耐心等待)...")
+
+                    # 【核心修复】将 PDF 转为图片流进行 OCR
+                    # 由于云端环境没有 pdf2image，我们尝试直接读取 PDF 中的图片流
+                    # 如果 PDF 是纯图片扫描件，pypdf 可以提取图片对象
+
+                    for page in pdf_reader.pages:
+                        if page.images:
+                            for img in page.images:
+                                # 直接把图片二进制数据喂给 OCR
+                                result, _ = ocr_engine(img.data)
+                                if result:
+                                    for line in result:
+                                        text_content += line[1] + "\n"
+
+                    if len(text_content) < 10:
+                        st.error("❌ OCR 识别失败：可能是图片格式不支持或文件损坏。")
+                        st.stop()
+                    else:
+                        st.success(f"✅ OCR 识别成功！提取了 {len(text_content)} 字")
 
             elif file_ext == ".docx":
                 st.write("📄 检测到 Word，正在解析...")
